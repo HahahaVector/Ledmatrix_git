@@ -154,6 +154,7 @@ module led_ctrl_free_fall(
 				index <= 4'd0;
 			end
 			2'b11:begin//turn height data to column data
+				//cache_ok <= (index == 4'd7) ? 1'b1 : 1'b0;
 				cache_ok <= 1'b1;
 				index <= index + 1'b1;
 				cache_SM <= (index == 4'd7) ? 2'b00 : 2'b11;
@@ -181,7 +182,7 @@ module led_ctrl_free_fall(
 				4'd2:begin col_last[index] <= 8'b00111111;end
 				4'd1:begin col_last[index] <= 8'b01111111;end//only one led will be lighted,so row[7] is 0
 				4'd0:begin col_last[index] <= 8'b01111111;end//as above
-				default:begin col_last[index] <= 8'b11111111;end
+				default:begin end
 				endcase
 			end
 			default:cache_SM <= 2'b00;
@@ -196,6 +197,7 @@ module led_ctrl_free_fall(
 	reg	col0_prepared;
 	reg	[39:0] time_cnt_0;
 	reg	[ws-1'b1:0] diff_cnt_r_0,diff_cnt_o_0,diff_cnt_h_0,height_diff_0;
+	reg	first_0,first_1;
 	
 	always @(posedge clk or negedge rst_n)
 	begin
@@ -209,7 +211,7 @@ module led_ctrl_free_fall(
 		else begin
 			case(col0_SM)
 			2'b00:begin
-				col1_en <= 1'b0;
+				//col1_en <= 1'b0;
 				col0 <= 1'b0;
 				row0 <= 8'hff;
 				time_cnt_0 <= 40'h0;
@@ -217,7 +219,8 @@ module led_ctrl_free_fall(
 				diff_cnt_r_0 <= 4'd0;
 				diff_cnt_o_0 <= 4'd0;
 				diff_cnt_h_0 <= 4'd0;
-				if(cache_ok && col0_en)begin
+				first_0 <= 1'b0;
+				if(cache_ok)begin
 					col0_SM <= (height_current_0 >= height_last_0) ? 2'b01 : 2'b10;
 					height_diff_0 <= (height_current_0 >= height_last_0) ? (height_current_0 - height_last_0) : (height_last_0 - height_current_0);
 					column0 <= col_last[0];
@@ -230,6 +233,7 @@ module led_ctrl_free_fall(
 			2'b01:begin//rise
 				col0_prepared <= 1'b0;
 				col1_en <= 1'b0;
+				row_index_0 <= 4'd0;
 				if(time_cnt_0 <= frame_time)begin//within one frame
 					col0_SM <= 2'b11;
 					time_cnt_0 <= time_cnt_0 + 1'b1;
@@ -256,6 +260,7 @@ module led_ctrl_free_fall(
 			2'b10:begin//fall
 				col0_prepared <= 1'b0;
 				col1_en <= 1'b0;
+				row_index_0 <= 4'd0;
 				if(time_cnt_0 <= frame_time)begin//within one frame
 					col0_SM <= 2'b11;
 					time_cnt_0 <= time_cnt_0 + 1'b1;
@@ -463,18 +468,23 @@ module led_ctrl_free_fall(
 			end
 			2'b11:begin
 				if(row_index_0 <= (ch - 1'b1))begin//within one column	
+					first_0 <= 1'b1;
 					row_index_0 <= row_index_0 + 1'b1;
 					col0 <= 1'b1;//enable leds in this column
 					row0 <= 8'hff;
 					row0[row_index_0] <= column0[row_index_0];
+					col1_en <= 1'b0;
 				end
 				else begin//Leds in prior column have been lighted,turn to next column
-					row_index_0 <= 4'd0;
+					//row_index_0 <= 4'd0;
 					//column0 <= 8'hff;
 					col0 <= 1'b0;
 					row0 <= 8'hff;
-					col0_SM <= (height_current_0 >= height_last_0) ? 2'b01 : 2'b10;
-					col1_en <= 1'b1;
+					if(time_cnt_0 >= frame_time) col0_SM <= 2'b00;
+					else if(col0_en) col0_SM <= (height_current_0 >= height_last_0) ? 2'b01 : 2'b10;
+					else  col0_SM <= 2'b11;
+					first_0 <= 1'b0;
+					col1_en <= (first_0) ? 1'b1 : 1'b0;
 				end
 			end
 			default:begin
@@ -487,7 +497,7 @@ module led_ctrl_free_fall(
 	end
 	
 	assign row = row0 & row1;
-	assign col = {col1,col0,5'h0};
+	assign col = {col0,col1,6'h0};
 	assign led_prepared = col0_prepared && col1_prepared;
 	
 	reg	[1:0] col1_SM;
@@ -504,7 +514,7 @@ module led_ctrl_free_fall(
 			column1 <= 8'hff;
 			col1_prepared <= 1'b0;
 			col1_SM <= 2'b00;
-			col0_en <= 1'b1;
+			col0_en <= 1'b0;
 		end
 		else begin
 			case(col1_SM)
@@ -517,21 +527,23 @@ module led_ctrl_free_fall(
 				diff_cnt_r_1 <= 4'd0;
 				diff_cnt_o_1 <= 4'd0;
 				diff_cnt_h_1 <= 4'd0;
+				first_1 <= 1'b0;
 				if(col1_en)begin
 					col1_SM <= (height_current_1 >= height_last_1) ? 2'b01 : 2'b10;
 					height_diff_1 <= (height_current_1 >= height_last_1) ? (height_current_1 - height_last_1) : (height_last_1 - height_current_1);
 					column1 <= col_last[1];
-					col0_en <= 1'b1;
+					//col0_en <= 1'b0;
 				end
 				else begin
 					height_diff_1 <= 4'd0;
 					column1 <= 8'hff;
-					col0_en <= 1'b0;
+					//col0_en <= 1'b0;
 				end
 			end
 			2'b01:begin//rise
 				col1_prepared <= 1'b0;
 				col0_en <= 1'b0;
+				row_index_1 <= 4'd0;
 				if(time_cnt_1 <= frame_time)begin//within one frame
 					col1_SM <= 2'b11;
 					time_cnt_1 <= time_cnt_1 + 1'b1;
@@ -558,6 +570,7 @@ module led_ctrl_free_fall(
 			2'b10:begin//fall
 				col1_prepared <= 1'b0;
 				col0_en <= 1'b0;
+				row_index_1 <= 4'd0;
 				if(time_cnt_1 <= frame_time)begin//within one frame
 					col1_SM <= 2'b11;
 					time_cnt_1 <= time_cnt_1 + 1'b1;
@@ -765,18 +778,23 @@ module led_ctrl_free_fall(
 			end
 			2'b11:begin
 				if(row_index_1 <= (ch - 1'b1))begin//within one column	
+					first_1 <= 1'b1;
 					row_index_1 <= row_index_1 + 1'b1;
 					col1 <= 1'b1;//enable leds in this column
 					row1 <= 8'hff;
 					row1[row_index_1] <= column1[row_index_1];
+					col0_en <= 1'b0;
 				end
 				else begin//Leds in prior column have been lighted,turn to next column
-					row_index_1 <= 4'd0;
+					//row_index_1 <= 4'd0;
 					//column1 <= 8'hff;
 					col1 <= 1'b0;
 					row1 <= 8'hff;
-					col1_SM <= (height_current_1 >= height_last_1) ? 2'b01 : 2'b10;
-					col0_en <= 1'b1;
+					if(time_cnt_1 >= frame_time) col1_SM <= 2'b00;
+					else if(col1_en) col1_SM <= (height_current_1 >= height_last_1) ? 2'b01 : 2'b10;
+					else col1_SM <= 2'b11;
+					first_1 <= 1'b0;
+					col0_en <= (first_1) ? 1'b1 : 1'b0;
 				end
 			end
 			default:begin
